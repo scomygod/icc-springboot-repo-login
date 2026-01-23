@@ -4,6 +4,7 @@ package ec.edu.ups.icc.fundamentos01.security.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -85,6 +86,9 @@ public class SecurityConfig {
                 .requestMatchers("/auth/**").permitAll()
                 .requestMatchers("/status/**").permitAll()
                 .requestMatchers("/actuator/**").permitAll()
+                
+                // Solo lectura de usuarios es pública (GET)
+                .requestMatchers(HttpMethod.GET, "/api/users/**").permitAll()
                 
                 // Todos los demás endpoints requieren autenticación
                 .anyRequest().authenticated()
