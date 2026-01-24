@@ -24,14 +24,14 @@
 ## **1. Registro de Usuario (POST /auth/register)**
 Creación de un nuevo usuario sin requerir token de autenticación.
 
-![Registro de usuario](assets/capture11.1.png)
+![Registro de usuario](assets/capture11.2.png)
 
 ---
 
 ## **2. Login de Usuario (POST /auth/login)**
 Autenticación de usuario y generación de token JWT.
 
-![Login de usuario](assets/capture11.2.png)
+![Login de usuario](assets/capture11.1.png)
 
 ---
 
