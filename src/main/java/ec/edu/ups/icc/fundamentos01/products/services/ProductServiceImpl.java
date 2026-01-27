@@ -4,13 +4,15 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import ec.edu.ups.icc.fundamentos01.categories.dtos.CategoryResponseDto;
 import ec.edu.ups.icc.fundamentos01.categories.entity.CategoryEntity;
@@ -23,6 +25,7 @@ import ec.edu.ups.icc.fundamentos01.products.dtos.UpdateProductDto;
 import ec.edu.ups.icc.fundamentos01.products.models.Product;
 import ec.edu.ups.icc.fundamentos01.products.models.ProductEntity;
 import ec.edu.ups.icc.fundamentos01.products.repository.ProductRepository;
+import ec.edu.ups.icc.fundamentos01.security.services.UserDetailsImpl;
 import ec.edu.ups.icc.fundamentos01.shared.dto.PageableDto;
 import ec.edu.ups.icc.fundamentos01.users.models.UserEntity;
 import ec.edu.ups.icc.fundamentos01.users.repository.UserRepository;
@@ -100,9 +103,12 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public ProductResponseDto update(Long id, UpdateProductDto dto) {
+    @Transactional
+    public ProductResponseDto update(Long id, UpdateProductDto dto, UserDetailsImpl currentUser) {
         ProductEntity existing = productRepo.findById(id)
                 .orElseThrow(() -> new NotFoundException("Producto no encontrado con ID: " + id));
+
+        validateOwnership(existing, currentUser);
 
         Set<CategoryEntity> categories = validateAndGetCategories(dto.categoryIds);
 
@@ -117,9 +123,12 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public void delete(Long id) {
+    @Transactional
+    public void delete(Long id, UserDetailsImpl currentUser) {
         ProductEntity product = productRepo.findById(id)
                 .orElseThrow(() -> new NotFoundException("Producto no encontrado con ID: " + id));
+
+        validateOwnership(product, currentUser);
 
         productRepo.delete(product);
     }
@@ -134,8 +143,7 @@ public class ProductServiceImpl implements ProductService {
     @Override
     public Slice<ProductResponseDto> findAllSlice(PageableDto pageableDto) {
         Pageable pageable = createPageable(pageableDto);
-        Slice<ProductEntity> productSlice = productRepo.findAllSlice(pageable); // ← AQUÍ: findAllSlice en lugar de
-                                                                                // findAll
+        Slice<ProductEntity> productSlice = productRepo.findAllSlice(pageable);
         return productSlice.map(this::toResponseDto);
     }
 
@@ -171,6 +179,27 @@ public class ProductServiceImpl implements ProductService {
         return productPage.map(this::toResponseDto);
     }
 
+    private void validateOwnership(ProductEntity product, UserDetailsImpl currentUser) {
+        if (hasAnyRole(currentUser, "ROLE_ADMIN", "ROLE_MODERATOR")) {
+            return;
+        }
+
+        if (!product.getOwner().getId().equals(currentUser.getId())) {
+            throw new AccessDeniedException("No puedes modificar productos ajenos");
+        }
+    }
+
+    private boolean hasAnyRole(UserDetailsImpl user, String... roles) {
+        for (String role : roles) {
+            for (GrantedAuthority authority : user.getAuthorities()) {
+                if (authority.getAuthority().equals(role)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private Pageable createPageable(PageableDto pageableDto) {
         int page = pageableDto.getPage();
         int size = pageableDto.getSize();
@@ -187,55 +216,46 @@ public class ProductServiceImpl implements ProductService {
         return PageRequest.of(page, size, sortObj);
     }
 
-private Sort createSort(String[] sortParams) {
-    if (sortParams == null || sortParams.length == 0) {
-        return Sort.by("id");
-    }
+    private Sort createSort(String[] sortParams) {
+        if (sortParams == null || sortParams.length == 0) {
+            return Sort.by("id");
+        }
 
-    List<Sort.Order> orders = new ArrayList<>();
+        List<Sort.Order> orders = new ArrayList<>();
 
-    // Manejar dos casos:
-    // 1. sort=price,desc (Spring lo recibe como ["price", "desc"])
-    // 2. sort=price&sort=name,asc (Spring lo recibe como ["price", "name,asc"])
-    
-    for (int i = 0; i < sortParams.length; i++) {
-        String param = sortParams[i].trim();
-        String property;
-        String direction = "asc"; // Default
-        
-        // Si contiene coma, es formato "property,direction"
-        if (param.contains(",")) {
-            String[] parts = param.split(",");
-            property = parts[0].trim();
-            direction = parts.length > 1 ? parts[1].trim() : "asc";
-        } 
-        // Si NO contiene coma, verificar si el siguiente elemento es "asc" o "desc"
-        else {
-            property = param;
-            // Verificar si el siguiente parámetro es una dirección
-            if (i + 1 < sortParams.length) {
-                String nextParam = sortParams[i + 1].trim();
-                if ("asc".equalsIgnoreCase(nextParam) || "desc".equalsIgnoreCase(nextParam)) {
-                    direction = nextParam;
-                    i++; // Saltar el siguiente elemento porque ya lo procesamos
+        for (int i = 0; i < sortParams.length; i++) {
+            String param = sortParams[i].trim();
+            String property;
+            String direction = "asc";
+            
+            if (param.contains(",")) {
+                String[] parts = param.split(",");
+                property = parts[0].trim();
+                direction = parts.length > 1 ? parts[1].trim() : "asc";
+            } else {
+                property = param;
+                if (i + 1 < sortParams.length) {
+                    String nextParam = sortParams[i + 1].trim();
+                    if ("asc".equalsIgnoreCase(nextParam) || "desc".equalsIgnoreCase(nextParam)) {
+                        direction = nextParam;
+                        i++;
+                    }
                 }
             }
+
+            if (!isValidSortProperty(property)) {
+                throw new BadRequestException("Propiedad de ordenamiento no válida: " + property);
+            }
+
+            Sort.Order order = "desc".equalsIgnoreCase(direction)
+                    ? Sort.Order.desc(property)
+                    : Sort.Order.asc(property);
+
+            orders.add(order);
         }
 
-        // Validar solo la propiedad, NO la dirección
-        if (!isValidSortProperty(property)) {
-            throw new BadRequestException("Propiedad de ordenamiento no válida: " + property);
-        }
-
-        Sort.Order order = "desc".equalsIgnoreCase(direction)
-                ? Sort.Order.desc(property)
-                : Sort.Order.asc(property);
-
-        orders.add(order);
+        return Sort.by(orders);
     }
-
-    return Sort.by(orders);
-}
 
     private boolean isValidSortProperty(String property) {
         Set<String> allowedProperties = Set.of(

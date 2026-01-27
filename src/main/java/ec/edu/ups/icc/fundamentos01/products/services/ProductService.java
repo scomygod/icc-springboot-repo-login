@@ -1,13 +1,12 @@
 package ec.edu.ups.icc.fundamentos01.products.services;
 
 import java.util.List;
-
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Slice;
-
 import ec.edu.ups.icc.fundamentos01.products.dtos.CreateProductDto;
 import ec.edu.ups.icc.fundamentos01.products.dtos.ProductResponseDto;
 import ec.edu.ups.icc.fundamentos01.products.dtos.UpdateProductDto;
+import ec.edu.ups.icc.fundamentos01.security.services.UserDetailsImpl;
 import ec.edu.ups.icc.fundamentos01.shared.dto.PageableDto;
 
 public interface ProductService {
@@ -22,9 +21,9 @@ public interface ProductService {
 
     List<ProductResponseDto> findByCategoryId(Long id);
 
-    ProductResponseDto update(Long id, UpdateProductDto dto);
+    ProductResponseDto update(Long id, UpdateProductDto dto, UserDetailsImpl currentUser);
 
-    void delete(Long id);
+    void delete(Long id, UserDetailsImpl currentUser);
 
     Page<ProductResponseDto> findAllPaginado(PageableDto pageableDto);
 

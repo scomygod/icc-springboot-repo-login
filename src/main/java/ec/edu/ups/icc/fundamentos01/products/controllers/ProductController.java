@@ -1,11 +1,12 @@
 package ec.edu.ups.icc.fundamentos01.products.controllers;
 
 import java.util.List;
-
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Slice;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -21,6 +22,7 @@ import ec.edu.ups.icc.fundamentos01.products.dtos.CreateProductDto;
 import ec.edu.ups.icc.fundamentos01.products.dtos.ProductResponseDto;
 import ec.edu.ups.icc.fundamentos01.products.dtos.UpdateProductDto;
 import ec.edu.ups.icc.fundamentos01.products.services.ProductService;
+import ec.edu.ups.icc.fundamentos01.security.services.UserDetailsImpl;
 import ec.edu.ups.icc.fundamentos01.shared.dto.PageableDto;
 import jakarta.validation.Valid;
 
@@ -35,7 +37,14 @@ public class ProductController {
     }
 
     @GetMapping
-    public ResponseEntity<Page<ProductResponseDto>> findAll(
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<ProductResponseDto>> findAll() {
+        List<ProductResponseDto> products = productService.findAll();
+        return ResponseEntity.ok(products);
+    }
+
+    @GetMapping("/paginated")
+    public ResponseEntity<Page<ProductResponseDto>> findAllPaginado(
             @Valid @ModelAttribute PageableDto pageable) {
 
         Page<ProductResponseDto> products = productService.findAllPaginado(pageable);
@@ -104,7 +113,9 @@ public class ProductController {
     }
 
     @PostMapping
-    public ResponseEntity<ProductResponseDto> create(@Valid @RequestBody CreateProductDto dto) {
+    public ResponseEntity<ProductResponseDto> create(
+            @Valid @RequestBody CreateProductDto dto,
+            @AuthenticationPrincipal UserDetailsImpl currentUser) {
         ProductResponseDto created = productService.create(dto);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
@@ -112,14 +123,17 @@ public class ProductController {
     @PutMapping("/{id}")
     public ResponseEntity<ProductResponseDto> update(
             @PathVariable("id") Long id,
-            @Valid @RequestBody UpdateProductDto dto) {
-        ProductResponseDto updated = productService.update(id, dto);
+            @Valid @RequestBody UpdateProductDto dto,
+            @AuthenticationPrincipal UserDetailsImpl currentUser) {
+        ProductResponseDto updated = productService.update(id, dto, currentUser);
         return ResponseEntity.ok(updated);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable("id") Long id) {
-        productService.delete(id);
+    public ResponseEntity<Void> delete(
+            @PathVariable("id") Long id,
+            @AuthenticationPrincipal UserDetailsImpl currentUser) {
+        productService.delete(id, currentUser);
         return ResponseEntity.noContent().build();
     }
 }
